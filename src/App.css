@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  background-color: transparent !important;
+  --creme-claro: #faf7f2;
+  --creme-borda: #e8e2d9;
+  --marrom-quente: #3d3a35;
+  --taupe-suave: #a39e94;
+}
+
+html,
+body {
+  background-color: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+.card-luxo {
+  background-color: var(--creme-claro) !important;
+  border-color: var(--creme-borda) !important;
+  box-shadow: 0 8px 32px rgba(60, 50, 40, 0.12) !important;
+}
+
+.input-luxo {
+  color: var(--marrom-quente) !important;
+}
+
+.input-luxo::placeholder {
+  color: var(--taupe-suave) !important;
+  opacity: 1 !important;
+}
