@@ -23,13 +23,10 @@ fn position_window_top_right(window: &tauri::WebviewWindow) {
 }
 
 fn show_window_smoothly(window: &tauri::WebviewWindow) {
-    // Posicionar a janela primeiro
-    position_window_top_right(window);
-    
-    // Emitir evento para o frontend fazer o fade-in
+    // Emitir evento para o frontend fazer o slide-in
     let _ = window.emit("window-show", ());
     
-    // Mostrar a janela
+    // Mostrar a janela - o frontend vai posicionar e animar
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -71,6 +68,17 @@ fn save_note(app: tauri::AppHandle, content: String) -> Result<(), String> {
     let mut file = File::create(path).map_err(|e| e.to_string())?;
     write!(file, "{}", content).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn get_monitor_size(app: tauri::AppHandle) -> Result<(f64, f64), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(Some(monitor)) = window.primary_monitor() {
+            let size = monitor.size();
+            return Ok((size.width as f64, size.height as f64));
+        }
+    }
+    Err("Não foi possível obter o tamanho do monitor".to_string())
 }
 
 
@@ -203,7 +211,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![save_note])
+        .invoke_handler(tauri::generate_handler![save_note, get_monitor_size])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -11,40 +11,29 @@ const appWindow = getCurrentWebviewWindow();
 function App() {
   const [content, setContent] = useState("");
   const [isDark, setIsDark] = useState(true);
-  const [fontSize, setFontSize] = useState(1.25); // 1.25rem = text-xl
+  const [fontSize, setFontSize] = useState(1.25);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Log para monitorar mudanças no showSuccess
-  useEffect(() => {
-    console.log("🟢 showSuccess mudou para:", showSuccess);
-  }, [showSuccess]);
-
-  // Função para tocar o som de clique
   const playSuccessSound = () => {
     if (isMuted) return;
 
     try {
       if (!audioRef.current) {
         audioRef.current = new Audio("/src/assets/click.wav");
-        audioRef.current.volume = 0.5; // Volume moderado
-        audioRef.current.playbackRate = 2.2; // Acelera o som em 120%
+        audioRef.current.volume = 0.5;
+        audioRef.current.playbackRate = 2.2;
       }
-      audioRef.current.currentTime = 0; // Reinicia do início
-      audioRef.current.play().catch((err) => {
-        console.error("Erro ao tocar som:", err);
-      });
-    } catch (err) {
-      console.error("Erro ao carregar som:", err);
-    }
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+    } catch (err) {}
   };
 
   useEffect(() => {
     textareaRef.current?.focus();
 
-    // Carregar configurações salvas
     const loadSettings = async () => {
       try {
         const dataDir = await appConfigDir();
@@ -68,18 +57,47 @@ function App() {
         if (savedMute !== null && savedMute !== undefined) {
           setIsMuted(savedMute);
         }
-      } catch (err) {
-        console.error("Erro ao carregar configurações:", err);
-      }
+      } catch (err) {}
     };
 
     loadSettings();
   }, []);
 
+  const hideWindowWithSlideOut = async () => {
+    try {
+      const { LogicalPosition } = await import("@tauri-apps/api/dpi");
+      const [monitorWidth] = await invoke<[number, number]>("get_monitor_size");
+
+      const currentPosition = await appWindow.outerPosition();
+      const currentX = currentPosition.x;
+      const currentY = currentPosition.y;
+
+      const finalX = monitorWidth;
+      const distance = finalX - currentX;
+
+      const steps = 15;
+      const duration = 200;
+      const stepDuration = duration / steps;
+
+      for (let i = 1; i <= steps; i++) {
+        await new Promise((resolve) => setTimeout(resolve, stepDuration));
+        const progress = i / steps;
+        const easedProgress = progress * progress;
+        const newX = currentX + distance * easedProgress;
+        await appWindow.setPosition(new LogicalPosition(newX, currentY));
+      }
+
+      await appWindow.setPosition(new LogicalPosition(finalX, currentY));
+      await appWindow.hide();
+    } catch (err) {
+      await appWindow.hide();
+    }
+  };
+
   useEffect(() => {
-    const handleBlur = () => {
+    const handleBlur = async () => {
       setContent("");
-      appWindow.hide();
+      await hideWindowWithSlideOut();
     };
 
     window.addEventListener("blur", handleBlur);
@@ -100,44 +118,82 @@ function App() {
           setIsMuted(!!event.payload);
         });
 
-        // Listener para quando a janela é mostrada - fazer fade-in
         unlistenShow = await listen("window-show", async () => {
           try {
-            // Resetar opacidade para 0
-            await appWindow.emit("set-opacity", 0);
+            const { LogicalPosition } = await import("@tauri-apps/api/dpi");
+            const [monitorWidth] = await invoke<[number, number]>(
+              "get_monitor_size"
+            );
 
-            // Aguardar um frame
+            const windowWidth = 520;
+            const padding = 16;
+
+            const finalX = monitorWidth - windowWidth - padding;
+            const finalY = padding;
+
+            const startX = monitorWidth;
+            const startY = padding;
+
+            await appWindow.setPosition(new LogicalPosition(startX, startY));
+
             await new Promise((resolve) => setTimeout(resolve, 16));
 
-            // Animar de 0 para 1 em 350ms
             const steps = 20;
-            const duration = 350;
+            const duration = 200;
+            const stepDuration = duration / steps;
+            const distance = startX - finalX;
+
+            for (let i = 1; i <= steps; i++) {
+              const progress = i / steps;
+              const easedProgress =
+                progress < 1 ? 1 - Math.pow(1 - progress, 3) : 1;
+              const currentX = startX - distance * easedProgress;
+              await appWindow.setPosition(
+                new LogicalPosition(currentX, finalY)
+              );
+
+              if (i < steps) {
+                await new Promise((resolve) =>
+                  setTimeout(resolve, stepDuration)
+                );
+              }
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            await appWindow.setPosition(new LogicalPosition(finalX, finalY));
+          } catch (err) {}
+        });
+
+        unlistenHide = await listen("window-hide", async () => {
+          try {
+            const { LogicalPosition } = await import("@tauri-apps/api/dpi");
+            const [monitorWidth] = await invoke<[number, number]>(
+              "get_monitor_size"
+            );
+
+            const currentPosition = await appWindow.outerPosition();
+            const currentX = currentPosition.x;
+            const currentY = currentPosition.y;
+
+            const finalX = monitorWidth;
+            const distance = finalX - currentX;
+
+            const steps = 15;
+            const duration = 200;
             const stepDuration = duration / steps;
 
             for (let i = 1; i <= steps; i++) {
               await new Promise((resolve) => setTimeout(resolve, stepDuration));
-              const opacity = i / steps;
-              await appWindow.emit("set-opacity", opacity);
+              const progress = i / steps;
+              const easedProgress = progress * progress;
+              const newX = currentX + distance * easedProgress;
+              await appWindow.setPosition(new LogicalPosition(newX, currentY));
             }
 
-            // Garantir que termine em 1.0
-            await appWindow.emit("set-opacity", 1.0);
-          } catch (err) {
-            console.error("Erro no fade-in:", err);
-          }
+            await appWindow.setPosition(new LogicalPosition(finalX, currentY));
+          } catch (err) {}
         });
-
-        // Listener para quando a janela é ocultada - resetar opacidade
-        unlistenHide = await listen("window-hide", async () => {
-          try {
-            await appWindow.emit("set-opacity", 0);
-          } catch (err) {
-            console.error("Erro ao resetar opacidade:", err);
-          }
-        });
-      } catch (err) {
-        console.error("Erro ao registrar listeners:", err);
-      }
+      } catch (err) {}
     };
 
     registerListeners();
@@ -150,54 +206,27 @@ function App() {
   }, []);
 
   const handleSave = async () => {
-    console.log(
-      "🔵 handleSave iniciado, content:",
-      content.trim() ? "tem conteúdo" : "vazio"
-    );
-
     if (content.trim()) {
-      console.log("💾 Salvando nota...");
+      invoke("save_note", { content }).catch(() => {});
 
-      // Salvar a nota
-      invoke("save_note", { content }).catch((err) =>
-        console.error("Erro ao salvar nota:", err)
-      );
-
-      console.log("🎵 Tocando som...");
-      // Tocar som de sucesso
       playSuccessSound();
-
-      console.log("✅ Ativando showSuccess = true");
-      // Mostrar animação de sucesso
       setShowSuccess(true);
 
-      console.log("⏱️ Aguardando 350ms...");
-      // Aguardar animação completar antes de fechar
       await new Promise((resolve) => setTimeout(resolve, 350));
 
-      console.log("🔄 Limpando estados e fechando...");
-      // Limpar estado e fechar
       setShowSuccess(false);
       setContent("");
-      appWindow
-        .hide()
-        .catch((err) => console.error("Erro ao fechar janela:", err));
-
-      console.log("✔️ handleSave completo");
+      await hideWindowWithSlideOut();
     } else {
-      console.log("⚠️ Conteúdo vazio, apenas fechando");
-      // Se não houver conteúdo, apenas fechar
       setContent("");
-      appWindow
-        .hide()
-        .catch((err) => console.error("Erro ao fechar janela:", err));
+      await hideWindowWithSlideOut();
     }
   };
 
   const handleFontSizeChange = async (increase: boolean) => {
     const newSize = increase
-      ? Math.min(fontSize + 0.125, 3) // Máximo 3rem
-      : Math.max(fontSize - 0.125, 0.5); // Mínimo 0.5rem
+      ? Math.min(fontSize + 0.125, 3)
+      : Math.max(fontSize - 0.125, 0.5);
 
     setFontSize(newSize);
     try {
@@ -205,9 +234,7 @@ function App() {
       const store = await Store.load(`${dataDir}store.json`);
       await store.set("fontSize", newSize);
       await store.save();
-    } catch (err) {
-      console.error("Erro ao salvar tamanho da fonte:", err);
-    }
+    } catch (err) {}
   };
 
   return (
@@ -217,26 +244,22 @@ function App() {
       }`}
     >
       <div className="w-full p-0 h-full relative rounded-lg overflow-hidden">
-        {/* Fundo verde de sucesso */}
         {showSuccess && (
-          <>
-            {console.log("🟩 Renderizando fundo verde, isDark:", isDark)}
-            <motion.div
-              className="absolute inset-0 pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.35, 0.35, 0] }}
-              transition={{
-                duration: 0.35,
-                times: [0, 0.15, 0.7, 1],
-                ease: "easeInOut",
-              }}
-              style={{
-                backgroundColor: isDark
-                  ? "rgba(34, 197, 94, 0.15)" // Verde escuro sutil para tema dark
-                  : "rgba(187, 247, 208, 0.5)", // Verde claro suave para tema light
-              }}
-            />
-          </>
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.35, 0.35, 0] }}
+            transition={{
+              duration: 0.35,
+              times: [0, 0.15, 0.7, 1],
+              ease: "easeInOut",
+            }}
+            style={{
+              backgroundColor: isDark
+                ? "rgba(34, 197, 94, 0.15)"
+                : "rgba(187, 247, 208, 0.5)",
+            }}
+          />
         )}
         <button
           onClick={async () => {
@@ -247,14 +270,10 @@ function App() {
               const store = await Store.load(`${dataDir}store.json`);
               await store.set("theme", newTheme);
               await store.save();
-            } catch (err) {
-              console.error("Erro ao salvar tema:", err);
-            }
+            } catch (err) {}
           }}
           className="absolute top-2 right-4 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/10"
-          aria-label={
-            isDark ? "Alternar para tema claro" : "Alternar para tema escuro"
-          }
+          aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
         >
           {isDark ? (
             <svg
@@ -302,10 +321,9 @@ function App() {
               if (e.key === "Escape") {
                 e.preventDefault();
                 setContent("");
-                appWindow.hide();
+                hideWindowWithSlideOut();
               }
 
-              // Ctrl++ para aumentar fonte (detectado como "=" ou "+")
               if (
                 (e.ctrlKey || e.metaKey) &&
                 (e.key === "=" || e.key === "+")
@@ -314,7 +332,6 @@ function App() {
                 handleFontSizeChange(true);
               }
 
-              // Ctrl+- para diminuir fonte
               if (
                 (e.ctrlKey || e.metaKey) &&
                 (e.key === "-" || e.key === "_")
@@ -323,7 +340,7 @@ function App() {
                 handleFontSizeChange(false);
               }
             }}
-            placeholder="O que você quer lembrar?"
+            placeholder="What's on your mind?"
             style={{ fontSize: `${fontSize}rem` }}
             className={`w-full h-full font-light tracking-wide leading-tight outline-none bg-transparent resize-none ${
               isDark
@@ -333,64 +350,60 @@ function App() {
           />
         </div>
 
-        {/* Checkmark de sucesso */}
         {showSuccess && (
-          <>
-            {console.log("✓ Renderizando checkmark")}
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.1 }}
+          >
             <motion.div
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
+              className="flex items-center justify-center"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+                duration: 0.2,
+              }}
             >
-              <motion.div
-                className="flex items-center justify-center"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 25,
-                  duration: 0.2,
-                }}
-              >
-                <div className="relative">
-                  <motion.div
-                    className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center shadow-lg"
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.15 }}
+              <div className="relative">
+                <motion.div
+                  className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center shadow-lg"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <motion.svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-10 h-10 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={3}
+                    initial={{ pathLength: 0, opacity: 0 }}
+                    animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{
+                      pathLength: {
+                        duration: 0.2,
+                        ease: "easeInOut",
+                        delay: 0.05,
+                      },
+                      opacity: { duration: 0.05, delay: 0.05 },
+                    }}
                   >
-                    <motion.svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-10 h-10 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={3}
-                      initial={{ pathLength: 0, opacity: 0 }}
-                      animate={{ pathLength: 1, opacity: 1 }}
-                      transition={{
-                        pathLength: {
-                          duration: 0.2,
-                          ease: "easeInOut",
-                          delay: 0.05,
-                        },
-                        opacity: { duration: 0.05, delay: 0.05 },
-                      }}
-                    >
-                      <motion.path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </motion.svg>
-                  </motion.div>
-                </div>
-              </motion.div>
+                    <motion.path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </motion.svg>
+                </motion.div>
+              </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </div>
     </div>
