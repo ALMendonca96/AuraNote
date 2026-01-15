@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { Store } from "@tauri-apps/plugin-store";
+import { appConfigDir } from "@tauri-apps/api/path";
 import { motion } from "framer-motion";
 
 const appWindow = getCurrentWebviewWindow();
@@ -8,10 +10,61 @@ const appWindow = getCurrentWebviewWindow();
 function App() {
   const [content, setContent] = useState("");
   const [isDark, setIsDark] = useState(true);
+  const [fontSize, setFontSize] = useState(1.25); // 1.25rem = text-xl
+  const [showSuccess, setShowSuccess] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Log para monitorar mudanças no showSuccess
+  useEffect(() => {
+    console.log("🟢 showSuccess mudou para:", showSuccess);
+  }, [showSuccess]);
+
+  // Função para tocar o som de clique
+  const playSuccessSound = () => {
+    try {
+      if (!audioRef.current) {
+        audioRef.current = new Audio("/src/assets/click.wav");
+        audioRef.current.volume = 0.5; // Volume moderado
+        audioRef.current.playbackRate = 2.2; // Acelera o som em 120%
+      }
+      audioRef.current.currentTime = 0; // Reinicia do início
+      audioRef.current.play().catch((err) => {
+        console.error("Erro ao tocar som:", err);
+      });
+    } catch (err) {
+      console.error("Erro ao carregar som:", err);
+    }
+  };
 
   useEffect(() => {
     textareaRef.current?.focus();
+
+    // Carregar configurações salvas
+    const loadSettings = async () => {
+      try {
+        const dataDir = await appConfigDir();
+        const store = await Store.load(`${dataDir}store.json`);
+
+        const savedTheme = await store.get<boolean>("theme");
+        if (savedTheme !== null && savedTheme !== undefined) {
+          setIsDark(savedTheme);
+        }
+
+        const savedFontSize = await store.get<number>("fontSize");
+        if (
+          savedFontSize !== null &&
+          savedFontSize !== undefined &&
+          savedFontSize > 0
+        ) {
+          setFontSize(savedFontSize);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar configurações:", err);
+      }
+    };
+
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -27,22 +80,65 @@ function App() {
     };
   }, []);
 
-  const handleSave = () => {
-    console.log("handleSave chamado!");
+  const handleSave = async () => {
+    console.log(
+      "🔵 handleSave iniciado, content:",
+      content.trim() ? "tem conteúdo" : "vazio"
+    );
 
     if (content.trim()) {
-      invoke("save_note", { content })
-        .then(() => console.log("Nota salva com sucesso"))
-        .catch((err) => console.error("Erro ao salvar nota:", err));
+      console.log("💾 Salvando nota...");
+
+      // Salvar a nota
+      invoke("save_note", { content }).catch((err) =>
+        console.error("Erro ao salvar nota:", err)
+      );
+
+      console.log("🎵 Tocando som...");
+      // Tocar som de sucesso
+      playSuccessSound();
+
+      console.log("✅ Ativando showSuccess = true");
+      // Mostrar animação de sucesso
+      setShowSuccess(true);
+
+      console.log("⏱️ Aguardando 350ms...");
+      // Aguardar animação completar antes de fechar
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      console.log("🔄 Limpando estados e fechando...");
+      // Limpar estado e fechar
+      setShowSuccess(false);
+      setContent("");
+      appWindow
+        .hide()
+        .catch((err) => console.error("Erro ao fechar janela:", err));
+
+      console.log("✔️ handleSave completo");
+    } else {
+      console.log("⚠️ Conteúdo vazio, apenas fechando");
+      // Se não houver conteúdo, apenas fechar
+      setContent("");
+      appWindow
+        .hide()
+        .catch((err) => console.error("Erro ao fechar janela:", err));
     }
+  };
 
-    setContent("");
+  const handleFontSizeChange = async (increase: boolean) => {
+    const newSize = increase
+      ? Math.min(fontSize + 0.125, 3) // Máximo 3rem
+      : Math.max(fontSize - 0.125, 0.5); // Mínimo 0.5rem
 
-    console.log("Fechando janela...");
-    appWindow
-      .hide()
-      .then(() => console.log("Janela fechada!"))
-      .catch((err) => console.error("Erro ao fechar janela:", err));
+    setFontSize(newSize);
+    try {
+      const dataDir = await appConfigDir();
+      const store = await Store.load(`${dataDir}store.json`);
+      await store.set("fontSize", newSize);
+      await store.save();
+    } catch (err) {
+      console.error("Erro ao salvar tamanho da fonte:", err);
+    }
   };
 
   return (
@@ -52,7 +148,7 @@ function App() {
       }`}
     >
       <motion.div
-        className="w-full p-0 h-full relative"
+        className="w-full p-0 h-full relative rounded-lg overflow-hidden"
         initial={{ x: 100, opacity: 0, scale: 0.96 }}
         animate={{ x: 0, opacity: 1, scale: 1 }}
         transition={{
@@ -60,8 +156,40 @@ function App() {
           ease: [0.25, 0.1, 0.25, 1],
         }}
       >
+        {/* Fundo verde de sucesso */}
+        {showSuccess && (
+          <>
+            {console.log("🟩 Renderizando fundo verde, isDark:", isDark)}
+            <motion.div
+              className="absolute inset-0 pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.35, 0.35, 0] }}
+              transition={{
+                duration: 0.35,
+                times: [0, 0.15, 0.7, 1],
+                ease: "easeInOut",
+              }}
+              style={{
+                backgroundColor: isDark
+                  ? "rgba(34, 197, 94, 0.15)" // Verde escuro sutil para tema dark
+                  : "rgba(187, 247, 208, 0.5)", // Verde claro suave para tema light
+              }}
+            />
+          </>
+        )}
         <button
-          onClick={() => setIsDark(!isDark)}
+          onClick={async () => {
+            const newTheme = !isDark;
+            setIsDark(newTheme);
+            try {
+              const dataDir = await appConfigDir();
+              const store = await Store.load(`${dataDir}store.json`);
+              await store.set("theme", newTheme);
+              await store.save();
+            } catch (err) {
+              console.error("Erro ao salvar tema:", err);
+            }
+          }}
           className="absolute top-2 right-4 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/10"
           aria-label={
             isDark ? "Alternar para tema claro" : "Alternar para tema escuro"
@@ -115,15 +243,94 @@ function App() {
                 setContent("");
                 appWindow.hide();
               }
+
+              // Ctrl++ para aumentar fonte (detectado como "=" ou "+")
+              if (
+                (e.ctrlKey || e.metaKey) &&
+                (e.key === "=" || e.key === "+")
+              ) {
+                e.preventDefault();
+                handleFontSizeChange(true);
+              }
+
+              // Ctrl+- para diminuir fonte
+              if (
+                (e.ctrlKey || e.metaKey) &&
+                (e.key === "-" || e.key === "_")
+              ) {
+                e.preventDefault();
+                handleFontSizeChange(false);
+              }
             }}
             placeholder="O que você quer lembrar?"
-            className={`w-full h-full text-xl font-light tracking-wide leading-tight outline-none bg-transparent resize-none ${
+            style={{ fontSize: `${fontSize}rem` }}
+            className={`w-full h-full font-light tracking-wide leading-tight outline-none bg-transparent resize-none ${
               isDark
                 ? "text-zinc-100 placeholder-zinc-700"
                 : "text-(--marrom-quente) placeholder-(--taupe-suave)"
             }`}
           />
         </div>
+
+        {/* Checkmark de sucesso */}
+        {showSuccess && (
+          <>
+            {console.log("✓ Renderizando checkmark")}
+            <motion.div
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.1 }}
+            >
+              <motion.div
+                className="flex items-center justify-center"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25,
+                  duration: 0.2,
+                }}
+              >
+                <div className="relative">
+                  <motion.div
+                    className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center shadow-lg"
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <motion.svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-10 h-10 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      animate={{ pathLength: 1, opacity: 1 }}
+                      transition={{
+                        pathLength: {
+                          duration: 0.2,
+                          ease: "easeInOut",
+                          delay: 0.05,
+                        },
+                        opacity: { duration: 0.05, delay: 0.05 },
+                      }}
+                    >
+                      <motion.path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </motion.svg>
+                  </motion.div>
+                </div>
+              </motion.div>
+            </motion.div>
+          </>
+        )}
       </motion.div>
     </div>
   );
