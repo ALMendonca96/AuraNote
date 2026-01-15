@@ -1,0 +1,7 @@
+{
+  "placeholder": "What's on your mind?",
+  "theme": {
+    "light": "Switch to light theme",
+    "dark": "Switch to dark theme"
+  }
+}

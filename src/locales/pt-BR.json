@@ -1,0 +1,7 @@
+{
+  "placeholder": "O que está em sua mente?",
+  "theme": {
+    "light": "Alternar para tema claro",
+    "dark": "Alternar para tema escuro"
+  }
+}

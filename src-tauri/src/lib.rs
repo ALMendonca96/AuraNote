@@ -1,3 +1,5 @@
+mod i18n;
+
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri::{menu::{Menu, MenuItem, PredefinedMenuItem, CheckMenuItem}, tray::TrayIconBuilder};
@@ -62,7 +64,8 @@ fn save_note(app: tauri::AppHandle, content: String) -> Result<(), String> {
     create_dir_all(&path).map_err(|e| e.to_string())?;
 
     let timestamp = Local::now().format("%Y-%m-%d-%H-%M-%S");
-    let filename = format!("nota-{}.md", timestamp);
+    let note_prefix = i18n::t("file.note_prefix");
+    let filename = format!("{}-{}.md", note_prefix, timestamp);
     path.push(filename);
 
     let mut file = File::create(path).map_err(|e| e.to_string())?;
@@ -78,7 +81,13 @@ fn get_monitor_size(app: tauri::AppHandle) -> Result<(f64, f64), String> {
             return Ok((size.width as f64, size.height as f64));
         }
     }
-    Err("Não foi possível obter o tamanho do monitor".to_string())
+    Err(i18n::t("error.monitor_size"))
+}
+
+#[tauri::command]
+fn set_locale(locale: String) -> Result<(), String> {
+    i18n::set_locale_from_str(&locale);
+    Ok(())
 }
 
 
@@ -92,11 +101,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![])))
         .setup(|app| {
-            let config_dir_i = MenuItem::with_id(app, "config_dir", "Configurar diretório...", true, None::<&str>)?;
+            // Inicializar sistema de localização
+            i18n::init_locale();
+            
+            let config_dir_i = MenuItem::with_id(app, "config_dir", &i18n::t("menu.config_dir"), true, None::<&str>)?;
             
             // Verificar estado inicial do autostart
             let is_enabled = app.autolaunch().is_enabled().unwrap_or(false);
-            let autostart_i = CheckMenuItem::with_id(app, "autostart", "Iniciar com Windows", true, is_enabled, None::<&str>)?;
+            let autostart_i = CheckMenuItem::with_id(app, "autostart", &i18n::t("menu.autostart"), true, is_enabled, None::<&str>)?;
 
             // Verificar estado inicial do mute de som
             let is_muted = {
@@ -115,14 +127,14 @@ pub fn run() {
                     false
                 }
             };
-            let mute_sound_i = CheckMenuItem::with_id(app, "mute_sound", "Mutar som", true, is_muted, None::<&str>)?;
+            let mute_sound_i = CheckMenuItem::with_id(app, "mute_sound", &i18n::t("menu.mute_sound"), true, is_muted, None::<&str>)?;
             
             let separator = PredefinedMenuItem::separator(app)?;
-            let quit_i = MenuItem::with_id(app, "quit", "Sair do AuraNote", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", &i18n::t("menu.quit"), true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&config_dir_i, &autostart_i, &mute_sound_i, &separator, &quit_i])?;
 
             let icon = app.default_window_icon()
-                .ok_or("Não foi possível carregar o ícone padrão")?
+                .ok_or_else(|| i18n::t("error.icon_load"))?
                 .clone();
 
             let _tray = TrayIconBuilder::new()
@@ -207,11 +219,11 @@ pub fn run() {
                         show_window_smoothly(&window);
                     }
                 }
-            }).expect("Erro ao registrar atalho");
+            }).expect(&i18n::t("error.shortcut"));
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![save_note, get_monitor_size])
+        .invoke_handler(tauri::generate_handler![save_note, get_monitor_size, set_locale])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Store } from "@tauri-apps/plugin-store";
@@ -9,6 +10,7 @@ import { motion } from "framer-motion";
 const appWindow = getCurrentWebviewWindow();
 
 function App() {
+  const { t } = useTranslation();
   const [content, setContent] = useState("");
   const [isDark, setIsDark] = useState(true);
   const [fontSize, setFontSize] = useState(1.25);
@@ -273,7 +275,7 @@ function App() {
             } catch (err) {}
           }}
           className="absolute top-2 right-4 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/10"
-          aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label={isDark ? t("theme.light") : t("theme.dark")}
         >
           {isDark ? (
             <svg
@@ -340,7 +342,7 @@ function App() {
                 handleFontSizeChange(false);
               }
             }}
-            placeholder="What's on your mind?"
+            placeholder={t("placeholder")}
             style={{ fontSize: `${fontSize}rem` }}
             className={`w-full h-full font-light tracking-wide leading-tight outline-none bg-transparent resize-none ${
               isDark
