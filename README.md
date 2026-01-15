@@ -11,7 +11,6 @@ Inspired by tools like Spotlight and Raycast, but focused purely on capturing yo
 ## ✨ Features
 - **⚡ Zero Friction:** Global shortcut (`Ctrl + Alt + K`) to toggle instantly.
 - **🔒 Local First:** Saves directly to a `.md` file on your machine (Obsidian/Logseq compatible).
-- **🎨 Glassmorphism UI:** Built with Tailwind v4 and Framer Motion for a premium native feel.
 - **⚙️ Configurable:** Customize storage path, dark/light mode, and font size via System Tray.
 - **🪶 Lightweight:** Powered by Rust (Tauri v2) backend using minimal resources (~5MB RAM in background).
 
