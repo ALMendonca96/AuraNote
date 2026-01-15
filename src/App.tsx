@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Store } from "@tauri-apps/plugin-store";
 import { appConfigDir } from "@tauri-apps/api/path";
+import { listen } from "@tauri-apps/api/event";
 import { motion } from "framer-motion";
 
 const appWindow = getCurrentWebviewWindow();
@@ -12,6 +13,7 @@ function App() {
   const [isDark, setIsDark] = useState(true);
   const [fontSize, setFontSize] = useState(1.25); // 1.25rem = text-xl
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -22,6 +24,8 @@ function App() {
 
   // Função para tocar o som de clique
   const playSuccessSound = () => {
+    if (isMuted) return;
+
     try {
       if (!audioRef.current) {
         audioRef.current = new Audio("/src/assets/click.wav");
@@ -59,6 +63,11 @@ function App() {
         ) {
           setFontSize(savedFontSize);
         }
+
+        const savedMute = await store.get<boolean>("mute_sound");
+        if (savedMute !== null && savedMute !== undefined) {
+          setIsMuted(savedMute);
+        }
       } catch (err) {
         console.error("Erro ao carregar configurações:", err);
       }
@@ -77,6 +86,26 @@ function App() {
 
     return () => {
       window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const registerListener = async () => {
+      try {
+        unlisten = await listen<boolean>("mute_changed", (event) => {
+          setIsMuted(!!event.payload);
+        });
+      } catch (err) {
+        console.error("Erro ao escutar mute_changed:", err);
+      }
+    };
+
+    registerListener();
+
+    return () => {
+      if (unlisten) unlisten();
     };
   }, []);
 

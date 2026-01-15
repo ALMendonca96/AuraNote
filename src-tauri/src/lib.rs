@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri::{menu::{Menu, MenuItem, PredefinedMenuItem, CheckMenuItem}, tray::TrayIconBuilder};
 use tauri_plugin_store::StoreBuilder;
@@ -77,10 +77,29 @@ pub fn run() {
             // Verificar estado inicial do autostart
             let is_enabled = app.autolaunch().is_enabled().unwrap_or(false);
             let autostart_i = CheckMenuItem::with_id(app, "autostart", "Iniciar com Windows", true, is_enabled, None::<&str>)?;
+
+            // Verificar estado inicial do mute de som
+            let is_muted = {
+                let config_path = app.path().app_config_dir().and_then(|p| Ok(p.join("store.json")));
+                if let Ok(store_path) = config_path {
+                    if let Ok(store) = StoreBuilder::new(app, store_path.clone()).build() {
+                        if let Some(value) = store.get("mute_sound") {
+                            value.as_bool().unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+            let mute_sound_i = CheckMenuItem::with_id(app, "mute_sound", "Mutar som", true, is_muted, None::<&str>)?;
             
             let separator = PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", "Sair do AuraNote", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&config_dir_i, &autostart_i, &separator, &quit_i])?;
+            let menu = Menu::with_items(app, &[&config_dir_i, &autostart_i, &mute_sound_i, &separator, &quit_i])?;
 
             let icon = app.default_window_icon()
                 .ok_or("Não foi possível carregar o ícone padrão")?
@@ -118,6 +137,19 @@ pub fn run() {
                                 let _ = autostart_manager.disable();
                             } else {
                                 let _ = autostart_manager.enable();
+                            }
+                        }
+                    } else if event.id() == "mute_sound" {
+                        let app_handle = app.clone();
+                        let config_path = app_handle.path().app_config_dir().and_then(|p| Ok(p.join("store.json")));
+
+                        if let Ok(store_path) = config_path {
+                            if let Ok(store) = StoreBuilder::new(&app_handle, store_path.clone()).build() {
+                                let current = store.get("mute_sound").and_then(|v| v.as_bool()).unwrap_or(false);
+                                let new_value = !current;
+                                let _ = store.set("mute_sound".to_string(), serde_json::json!(new_value));
+                                let _ = store.save();
+                                let _ = app_handle.emit("mute_changed", new_value);
                             }
                         }
                     }
