@@ -22,6 +22,18 @@ fn position_window_top_right(window: &tauri::WebviewWindow) {
     }
 }
 
+fn show_window_smoothly(window: &tauri::WebviewWindow) {
+    // Posicionar a janela primeiro
+    position_window_top_right(window);
+    
+    // Emitir evento para o frontend fazer o fade-in
+    let _ = window.emit("window-show", ());
+    
+    // Mostrar a janela
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 fn get_save_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let store_path = path.join("store.json");
@@ -158,9 +170,13 @@ pub fn run() {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                             position_window_top_right(&window);
-                             let _ = window.show();
-                             let _ = window.set_focus();
+                            if window.is_visible().unwrap() {
+                                // Emitir evento para o frontend resetar opacidade antes de ocultar
+                                let _ = window.emit("window-hide", ());
+                                let _ = window.hide();
+                            } else {
+                                show_window_smoothly(&window);
+                            }
                         }
                     }
                 })
@@ -176,11 +192,11 @@ pub fn run() {
                 if shortcut == &ctrl_alt_k && event.state() == ShortcutState::Pressed {
                     let window = app_handle.get_webview_window("main").unwrap();
                     if window.is_visible().unwrap() {
+                        // Emitir evento para o frontend resetar opacidade antes de ocultar
+                        let _ = window.emit("window-hide", ());
                         let _ = window.hide();
                     } else {
-                        position_window_top_right(&window);
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        show_window_smoothly(&window);
                     }
                 }
             }).expect("Erro ao registrar atalho");

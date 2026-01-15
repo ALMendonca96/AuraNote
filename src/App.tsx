@@ -91,21 +91,61 @@ function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let unlistenShow: (() => void) | undefined;
+    let unlistenHide: (() => void) | undefined;
 
-    const registerListener = async () => {
+    const registerListeners = async () => {
       try {
         unlisten = await listen<boolean>("mute_changed", (event) => {
           setIsMuted(!!event.payload);
         });
+
+        // Listener para quando a janela é mostrada - fazer fade-in
+        unlistenShow = await listen("window-show", async () => {
+          try {
+            // Resetar opacidade para 0
+            await appWindow.emit("set-opacity", 0);
+
+            // Aguardar um frame
+            await new Promise((resolve) => setTimeout(resolve, 16));
+
+            // Animar de 0 para 1 em 350ms
+            const steps = 20;
+            const duration = 350;
+            const stepDuration = duration / steps;
+
+            for (let i = 1; i <= steps; i++) {
+              await new Promise((resolve) => setTimeout(resolve, stepDuration));
+              const opacity = i / steps;
+              await appWindow.emit("set-opacity", opacity);
+            }
+
+            // Garantir que termine em 1.0
+            await appWindow.emit("set-opacity", 1.0);
+          } catch (err) {
+            console.error("Erro no fade-in:", err);
+          }
+        });
+
+        // Listener para quando a janela é ocultada - resetar opacidade
+        unlistenHide = await listen("window-hide", async () => {
+          try {
+            await appWindow.emit("set-opacity", 0);
+          } catch (err) {
+            console.error("Erro ao resetar opacidade:", err);
+          }
+        });
       } catch (err) {
-        console.error("Erro ao escutar mute_changed:", err);
+        console.error("Erro ao registrar listeners:", err);
       }
     };
 
-    registerListener();
+    registerListeners();
 
     return () => {
       if (unlisten) unlisten();
+      if (unlistenShow) unlistenShow();
+      if (unlistenHide) unlistenHide();
     };
   }, []);
 
@@ -176,15 +216,7 @@ function App() {
         isDark ? "bg-zinc-950" : "bg-(--creme-claro)"
       }`}
     >
-      <motion.div
-        className="w-full p-0 h-full relative rounded-lg overflow-hidden"
-        initial={{ x: 100, opacity: 0, scale: 0.96 }}
-        animate={{ x: 0, opacity: 1, scale: 1 }}
-        transition={{
-          duration: 0.35,
-          ease: [0.25, 0.1, 0.25, 1],
-        }}
-      >
+      <div className="w-full p-0 h-full relative rounded-lg overflow-hidden">
         {/* Fundo verde de sucesso */}
         {showSuccess && (
           <>
@@ -360,7 +392,7 @@ function App() {
             </motion.div>
           </>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }
